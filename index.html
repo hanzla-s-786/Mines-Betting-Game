@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -278,8 +278,19 @@
       const cell = e.target;
 
       if (bombPositions.includes(index)) {
+        // Reveal clicked bomb
         cell.classList.add("bomb");
         cell.textContent = "💣";
+
+        // Reveal all other bombs
+        document.querySelectorAll(".cell").forEach(c => {
+          const idx = parseInt(c.dataset.index);
+          if (bombPositions.includes(idx) && idx !== index) {
+            c.classList.add("bomb");
+            c.textContent = "💣";
+          }
+        });
+
         gameOver = true;
         gameStarted = false;
         disableGrid();
