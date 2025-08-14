@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mines Betting Game</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to bottom right, #004f7a, #001f3f);
+      color: white;
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 1rem;
+      margin-top: 50px;
+    }
+
+    .cell {
+      background: #025f9c;
+      border: 2px solid #0483d6;
+      border-radius: 6px;
+      aspect-ratio: 1 / 1;
+      font-size: 1.4rem;
+      font-weight: bold;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: background-color 0.3s;
+      user-select: none;
+      pointer-events: none;
+      cursor: not-allowed;
+    }
+
+    .cell.active {
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .cell.clicked {
+      background-color: #2ecc71;
+    }
+
+    .cell.bomb {
+      background-color: #e74c3c;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      width: 100%;
+      max-width: 440px;
+      margin: 20px auto;
+    }
+
+    .status {
+      margin-top: 1rem;
+      font-weight: 600;
+      font-size: 1.1rem;
+      min-height: 1.5em;
+    }
+
+    #balanceDisplay {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-weight: bold;
+    }
+
+    @media (max-width: 576px) {
+      .form-label {
+        font-size: 0.9rem;
+      }
+
+      input, select, button {
+        font-size: 1rem !important;
+      }
+
+      .btn {
+        padding: 10px 12px;
+      }
+
+      #balanceDisplay {
+        font-size: 0.85rem;
+        padding: 6px 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="balanceDisplay">💰 Balance: <span id="userBalance">500</span> PKR</div>
+
+  <h1>💣 Mines Betting Game</h1>
+
+  <div class="container">
+
+    <!-- Inputs -->
+    <div class="row g-3 mb-3 text-start w-100" style="max-width: 500px;">
+      <div class="col-12">
+        <label class="form-label text-white" for="betAmount">Bet Amount (PKR)</label>
+        <input type="number" id="betAmount" class="form-control" placeholder="Enter bet amount" min="1" value="16" />
+      </div>
+
+      <div class="col-12">
+        <label class="form-label text-white" for="mineCount">Select Number of Mines</label>
+        <select id="mineCount" class="form-select" disabled>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+
+      <div class="col-12 text-center">
+        <strong class="d-block">Next Multiplier: <span id="multiplier">-</span></strong>
+      </div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="d-flex flex-column flex-sm-row justify-content-center gap-3 mb-3 w-100" style="max-width: 500px;">
+      <button id="randomBtn" class="btn btn-warning w-100" disabled>🎲 Random</button>
+      <button id="startBtn" class="btn btn-success w-100" disabled>▶️ BET</button>
+      <button id="cashoutBtn" class="btn btn-danger w-100" style="display: none;">💸 Cashout</button>
+      <button id="resetBtn" class="btn btn-info text-dark w-100" style="display: none;">🔁 Play Again</button>
+    </div>
+
+    <!-- Grid -->
+    <div class="grid" id="grid"></div>
+
+    <!-- Score -->
+    <div class="status" id="status">Score: 0 | Current Win: 0 PKR</div>
+  </div>
+
+  <script>
+    const grid = document.getElementById("grid");
+    const mineCountSelect = document.getElementById("mineCount");
+    const betInput = document.getElementById("betAmount");
+    const multiplierText = document.getElementById("multiplier");
+    const startBtn = document.getElementById("startBtn");
+    const randomBtn = document.getElementById("randomBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const cashoutBtn = document.getElementById("cashoutBtn");
+    const statusText = document.getElementById("status");
+    const userBalanceDisplay = document.getElementById("userBalance");
+
+    const totalBoxes = 25;
+    let bombPositions = [];
+    let clickedIndexes = new Set();
+    let score = 0;
+    let currentWin = 0;
+    let userBalance = 0;
+    let gameOver = false;
+    let gameStarted = false;
+
+    function truncateTo2Decimals(num) {
+      return Math.floor(num * 100) / 100;
+    }
+
+    function loadUserBalance() {
+      userBalance = parseFloat(localStorage.getItem("userBalance")) || 500;
+      userBalanceDisplay.textContent = userBalance.toFixed(2);
+    }
+
+    function saveUserBalance() {
+      localStorage.setItem("userBalance", userBalance.toFixed(2));
+    }
+
+    function updateMultiplier(mines) {
+      let multiplier = 1;
+      switch (mines) {
+        case 1: multiplier = 1.01; break;
+        case 2: multiplier = 1.05; break;
+        case 3: multiplier = 1.10; break;
+        case 4: multiplier = 1.15; break;
+        case 5: multiplier = 1.21; break;
+      }
+      multiplierText.textContent = `${multiplier.toFixed(2)}x`;
+      return multiplier;
+    }
+
+    function checkBetValidity() {
+      const bet = parseFloat(betInput.value);
+      if (bet > 0 && bet <= userBalance) {
+        startBtn.disabled = false;
+        mineCountSelect.disabled = false;
+      } else {
+        startBtn.disabled = true;
+        mineCountSelect.disabled = true;
+      }
+    }
+
+    function generateBombs(mines) {
+      const bombs = new Set();
+      while (bombs.size < mines) {
+        bombs.add(Math.floor(Math.random() * totalBoxes));
+      }
+      return [...bombs];
+    }
+
+    function renderGrid() {
+      grid.innerHTML = "";
+      for (let i = 0; i < totalBoxes; i++) {
+        const cell = document.createElement("div");
+        cell.classList.add("cell");
+        cell.dataset.index = i;
+        grid.appendChild(cell);
+      }
+    }
+
+    function enableGrid() {
+      document.querySelectorAll(".cell").forEach(cell => {
+        cell.classList.add("active");
+        cell.addEventListener("click", handleCellClick);
+      });
+      randomBtn.disabled = false;
+    }
+
+    function disableGrid() {
+      document.querySelectorAll(".cell").forEach(cell => {
+        cell.classList.remove("active");
+        cell.removeEventListener("click", handleCellClick);
+      });
+      randomBtn.disabled = true;
+    }
+
+    function startGame() {
+      const bet = parseFloat(betInput.value);
+      const mines = parseInt(mineCountSelect.value);
+
+      if (bet > userBalance || bet <= 0) return alert("Invalid bet!");
+
+      userBalance -= bet;
+      saveUserBalance();
+      loadUserBalance();
+
+      score = 0;
+      currentWin = 0;
+      clickedIndexes.clear();
+      gameOver = false;
+      gameStarted = true;
+      bombPositions = generateBombs(mines);
+      renderGrid();
+      enableGrid();
+      updateMultiplier(mines);
+
+      statusText.textContent = `Score: 0 | Current Win: 0 PKR`;
+
+      startBtn.disabled = true;
+      mineCountSelect.disabled = true;
+      betInput.disabled = true;
+      resetBtn.style.display = "none";
+      cashoutBtn.style.display = "inline-block";
+    }
+
+    function handleCellClick(e) {
+      if (gameOver) return;
+
+      const index = parseInt(e.target.dataset.index);
+      if (clickedIndexes.has(index)) return;
+
+      const cell = e.target;
+
+      if (bombPositions.includes(index)) {
+        cell.classList.add("bomb");
+        cell.textContent = "💣";
+        gameOver = true;
+        gameStarted = false;
+        disableGrid();
+        statusText.textContent = `💥 Bomb! You lost your bet.`;
+        cashoutBtn.style.display = "none";
+        resetBtn.style.display = "inline-block";
+        return;
+      }
+
+      clickedIndexes.add(index);
+      cell.classList.add("clicked");
+      cell.textContent = "✅";
+
+      const multiplier = updateMultiplier(parseInt(mineCountSelect.value));
+      const bet = parseFloat(betInput.value);
+      const reward = bet * multiplier;
+
+      score += reward;
+      currentWin = truncateTo2Decimals(score);
+      statusText.textContent = `Score: ${clickedIndexes.size} | Current Win: ${currentWin} PKR`;
+    }
+
+    function clickRandomBox() {
+      if (gameOver || !gameStarted) return;
+
+      const unclicked = [...document.querySelectorAll(".cell")].filter(cell => {
+        return !clickedIndexes.has(parseInt(cell.dataset.index));
+      });
+
+      if (unclicked.length === 0) return;
+
+      const randomCell = unclicked[Math.floor(Math.random() * unclicked.length)];
+      randomCell.click();
+    }
+
+    function cashOut() {
+      userBalance += currentWin;
+      saveUserBalance();
+      loadUserBalance();
+      gameOver = true;
+      gameStarted = false;
+      disableGrid();
+      statusText.textContent = `✅ Cashout successful! You won ${currentWin} PKR`;
+      resetBtn.style.display = "inline-block";
+      cashoutBtn.style.display = "none";
+    }
+
+    function resetGame() {
+      gameOver = false;
+      gameStarted = false;
+      clickedIndexes.clear();
+      score = 0;
+      currentWin = 0;
+      renderGrid();
+      disableGrid();
+      multiplierText.textContent = "-";
+      resetBtn.style.display = "none";
+      cashoutBtn.style.display = "none";
+      betInput.disabled = false;
+      mineCountSelect.disabled = true;
+      betInput.value = "16";
+      checkBetValidity();
+      statusText.textContent = `Score: 0 | Current Win: 0 PKR`;
+    }
+
+    betInput.addEventListener("input", checkBetValidity);
+    startBtn.addEventListener("click", startGame);
+    randomBtn.addEventListener("click", clickRandomBox);
+    resetBtn.addEventListener("click", resetGame);
+    cashoutBtn.addEventListener("click", cashOut);
+
+    loadUserBalance();
+    renderGrid();
+    disableGrid();
+    checkBetValidity();
+  </script>
+</body>
+</html>
